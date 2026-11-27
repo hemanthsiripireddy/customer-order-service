@@ -56,6 +56,7 @@ class OrderServiceTest {
         orderId = UUID.randomUUID();
 
         customer = new Customer("Alice", "alice", "hash", null);
+        customer.setCustomerId(customerId); // simulate JPA-generated UUID
         address = new CustomerAddress(customer, "1 Main St", "Springfield", "IL", "62701");
     }
 
@@ -137,6 +138,7 @@ class OrderServiceTest {
     @Test
     void getOrderForCustomerRejectsCrossCustomerAccess() {
         Customer other = new Customer("Bob", "bob", "hash", null);
+        other.setCustomerId(UUID.randomUUID()); // different UUID from customerId
         Order order = new Order(other, address, BigDecimal.TEN, OrderStatus.PLACED);
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
 
@@ -154,10 +156,7 @@ class OrderServiceTest {
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // getOrderForCustomer checks customer ownership — customer id matches null in unit test
-        // We stub findById directly and bypass the ownership check by using the same customer
-        UUID cid = order.getCustomer().getCustomerId(); // null in unit test, same object reference
-        Order cancelled = orderService.cancelOrder(cid, orderId);
+        Order cancelled = orderService.cancelOrder(customerId, orderId);
 
         assertThat(cancelled.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         verify(inventoryServiceClient).release(any());
@@ -168,8 +167,7 @@ class OrderServiceTest {
         Order order = new Order(customer, address, BigDecimal.TEN, OrderStatus.DELIVERED);
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
 
-        UUID cid = order.getCustomer().getCustomerId();
-        assertThatThrownBy(() -> orderService.cancelOrder(cid, orderId))
+        assertThatThrownBy(() -> orderService.cancelOrder(customerId, orderId))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("DELIVERED");
     }

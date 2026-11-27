@@ -44,7 +44,7 @@ class AddressServiceTest {
         addressId = UUID.randomUUID();
 
         customer = new Customer("Alice", "alice", "hash", null);
-        // set customerId via reflection is avoided — we rely on stub returns
+        customer.setCustomerId(customerId); // simulate JPA-generated UUID
         address = new CustomerAddress(customer, "1 Main St", "Springfield", "IL", "62701");
     }
 
@@ -75,15 +75,9 @@ class AddressServiceTest {
     @Test
     void softDeletesAddress() {
         when(addressRepository.findById(addressId)).thenReturn(Optional.of(address));
-        // address belongs to same customer
-        address.getCustomer(); // ensure customer is set
-        when(customerService.getById(any())).thenReturn(customer);
         when(addressRepository.save(any(CustomerAddress.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // need customerId to match — set via a customer whose id matches
-        UUID cid = address.getCustomer().getCustomerId(); // may be null in unit test
-        // We test via a customer whose id matches the address's customer id
-        addressService.softDeleteAddress(cid, addressId);
+        addressService.softDeleteAddress(customerId, addressId);
 
         verify(addressRepository).save(address);
         assertThat(address.isDeleted()).isTrue();
@@ -91,9 +85,8 @@ class AddressServiceTest {
 
     @Test
     void softDeleteRejectsCrossCustomerAccess() {
-        UUID otherId = UUID.randomUUID();
-
         Customer other = new Customer("Bob", "bob", "hash", null);
+        other.setCustomerId(UUID.randomUUID()); // different UUID from customerId
         CustomerAddress bobAddress = new CustomerAddress(other, "2 Oak Ave", "Shelbyville", "IL", "62702");
 
         when(addressRepository.findById(addressId)).thenReturn(Optional.of(bobAddress));
@@ -126,8 +119,7 @@ class AddressServiceTest {
         when(addressRepository.findById(addressId)).thenReturn(Optional.of(address));
         when(addressRepository.save(any(CustomerAddress.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UUID cid = address.getCustomer().getCustomerId();
-        CustomerAddress result = addressService.updateAddress(cid, addressId, "99 New Rd", "Chicago", "IL", "60601");
+        CustomerAddress result = addressService.updateAddress(customerId, addressId, "99 New Rd", "Chicago", "IL", "60601");
 
         assertThat(result.getAddressLine()).isEqualTo("99 New Rd");
         assertThat(result.getCity()).isEqualTo("Chicago");
